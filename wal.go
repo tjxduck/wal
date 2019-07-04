@@ -205,6 +205,19 @@ func (wal *WALWriter) pruneSegments(total int) error {
 			}
 		}
 	}
+	if startAt >= wal.first {
+		// remove tag cache as well
+		for tag, pos := range wal.cache.Tags {
+			if pos.Segment <= startAt {
+				delete(wal.cache.Tags, tag)
+			}
+		}
+		err := wal.cacheEnc.Encode(&wal.cache)
+		if err != nil {
+			return err
+		}
+		wal.cacheFile.Sync()
+	}
 
 	// Move the oldest horizon forward to our current first segment
 	wal.first = startAt + 1
@@ -372,6 +385,24 @@ func (wal *WALReader) Seek(p Position) error {
 	wal.seg = seg
 
 	return nil
+}
+
+func (wal *WALReader) SeekLast() error {
+	p := Position{
+		Segment: wal.last,
+		Offset:  0,
+	}
+	err := wal.Seek(p)
+	if err != nil {
+		return err
+	}
+	for wal.Next() {
+		p, err = wal.Pos()
+		if err != nil {
+			return err
+		}
+	}
+	return wal.Seek(p)
 }
 
 func (wal *WALReader) SeekTag(tag []byte) (Position, error) {
