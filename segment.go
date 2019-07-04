@@ -199,8 +199,8 @@ func (s *SegmentWriter) Write(data []byte) (int, error) {
 	return s.writeType(dataType, data)
 }
 
-func (s *SegmentWriter) WriteTag(data []byte) error {
-	_, err := s.writeType(tagType, data)
+func (s *SegmentWriter) WriteTag(tag []byte) error {
+	_, err := s.writeType(tagType, tag)
 	return err
 }
 
