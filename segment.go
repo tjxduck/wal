@@ -14,8 +14,7 @@ import (
 	tomb "gopkg.in/tomb.v2"
 
 	"os"
-
-	"github.com/golang/snappy"
+	//"github.com/golang/snappy"
 )
 
 type SegmentWriter struct {
@@ -160,13 +159,13 @@ const (
 )
 
 func (s *SegmentWriter) writeType(t byte, data []byte) (int, error) {
-	out := snappy.Encode(s.buf, data)
+	//out := snappy.Encode(s.buf, data)
 
-	n := binary.PutUvarint(s.sbuf[5:], uint64(len(out)))
+	n := binary.PutUvarint(s.sbuf[5:], uint64(len(data)))
 
 	s.cs.Reset()
 	s.cs.Write(s.sbuf[5 : 5+n])
-	s.cs.Write(out)
+	s.cs.Write(data)
 
 	binary.BigEndian.PutUint32(s.sbuf[:4], s.cs.Sum32())
 
@@ -177,7 +176,7 @@ func (s *SegmentWriter) writeType(t byte, data []byte) (int, error) {
 		return 0, err
 	}
 
-	_, err = s.f.Write(out)
+	_, err = s.f.Write(data)
 	if err != nil {
 		return 0, err
 	}
@@ -189,7 +188,7 @@ func (s *SegmentWriter) writeType(t byte, data []byte) (int, error) {
 		}
 	}
 
-	entry := int64(5 + n + len(out))
+	entry := int64(5 + n + len(data))
 
 	atomic.AddInt64(s.size, entry)
 
@@ -342,12 +341,7 @@ func (r *SegmentReader) SeekTag(tag []byte) (int64, error) {
 		}
 
 		if ent.entryType == tagType {
-			plain, err := snappy.Decode(r.buf2, ent.value)
-			if err != nil {
-				return 0, err
-			}
-
-			if bytes.Equal(plain, tag) {
+			if bytes.Equal(ent.value, tag) {
 				lastPos = pos
 			}
 		}
@@ -430,12 +424,7 @@ top:
 		goto top
 	}
 
-	r.value, err = snappy.Decode(r.buf2, ent.value)
-	if err != nil {
-		r.err = err
-		return false
-	}
-
+	r.value = ent.value
 	r.valueCRC = ent.crc
 
 	return true
