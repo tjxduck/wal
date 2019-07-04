@@ -391,6 +391,13 @@ func (wal *WALReader) SeekTag(tag []byte) (Position, error) {
 			return lastPos, err
 		}
 
+		if wal.seg != nil {
+			err = wal.seg.Close()
+			if err != nil {
+				return lastPos, err
+			}
+		}
+
 		wal.seg = seg
 
 		pos, err := seg.SeekTag(tag)

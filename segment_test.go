@@ -163,8 +163,6 @@ func TestSegment(t *testing.T) {
 		segment, err := NewSegmentWriter(path)
 		require.NoError(t, err)
 
-		defer segment.Close()
-
 		_, err = segment.Write([]byte("test data"))
 		require.NoError(t, err)
 
@@ -180,6 +178,8 @@ func TestSegment(t *testing.T) {
 
 		r, err := NewSegmentReader(path)
 		require.NoError(t, err)
+
+		defer r.Close()
 
 		tagPos, err := r.SeekTag([]byte("test"))
 		require.NoError(t, err)

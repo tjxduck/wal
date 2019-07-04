@@ -31,6 +31,8 @@ func TestWal(t *testing.T) {
 		wal, err := New(path)
 		require.NoError(t, err)
 
+		defer wal.Close()
+
 		data := []byte("this is data")
 
 		err = wal.Write(data)
@@ -38,6 +40,8 @@ func TestWal(t *testing.T) {
 
 		r, err := NewSegmentReader(wal.current)
 		require.NoError(t, err)
+
+		defer r.Close()
 
 		assert.True(t, r.Next())
 
@@ -52,6 +56,8 @@ func TestWal(t *testing.T) {
 		wal, err := New(path)
 		require.NoError(t, err)
 
+		defer wal.Close()
+
 		data := []byte("this is data")
 
 		err = wal.Write(data)
@@ -65,6 +71,8 @@ func TestWal(t *testing.T) {
 
 		r, err := NewSegmentReader(wal.current)
 		require.NoError(t, err)
+
+		defer r.Close()
 
 		assert.True(t, r.Next())
 
@@ -186,6 +194,8 @@ func TestWal(t *testing.T) {
 		r, err := NewReader(path)
 		require.NoError(t, err)
 
+		defer r.Close()
+
 		err = r.Seek(pos)
 		require.NoError(t, err)
 
@@ -211,6 +221,8 @@ func TestWal(t *testing.T) {
 
 		r, err := NewReader(path)
 		require.NoError(t, err)
+
+		defer r.Close()
 
 		assert.True(t, r.Next())
 
@@ -247,6 +259,8 @@ func TestWal(t *testing.T) {
 
 		r, err := NewReader(path)
 		require.NoError(t, err)
+
+		defer r.Close()
 
 		require.True(t, r.Next())
 
@@ -294,6 +308,8 @@ func TestWal(t *testing.T) {
 		r, err := NewReader(path)
 		require.NoError(t, err)
 
+		defer r.Close()
+
 		require.True(t, r.Next())
 
 		assert.Equal(t, "first data", string(r.Value()))
@@ -336,6 +352,7 @@ func TestWal(t *testing.T) {
 		require.NoError(t, err)
 
 		err = wal.Close()
+		require.NoError(t, err)
 
 		wal, err = New(path)
 		require.NoError(t, err)
@@ -352,9 +369,12 @@ func TestWal(t *testing.T) {
 		require.NoError(t, err)
 
 		err = wal.Close()
+		require.NoError(t, err)
 
 		r, err := NewReader(path)
 		require.NoError(t, err)
+
+		defer r.Close()
 
 		require.True(t, r.Next())
 
@@ -411,9 +431,12 @@ func TestWal(t *testing.T) {
 		require.NoError(t, err)
 
 		err = wal.Close()
+		require.NoError(t, err)
 
 		r, err := NewReader(path)
 		require.NoError(t, err)
+
+		defer r.Close()
 
 		require.True(t, r.Next())
 
@@ -445,6 +468,8 @@ func TestWal(t *testing.T) {
 
 		r, err := NewReader(path)
 		require.NoError(t, err)
+
+		defer r.Close()
 
 		pos, err := r.SeekTag([]byte("commit"))
 		require.NoError(t, err)
@@ -483,6 +508,8 @@ func TestWal(t *testing.T) {
 
 		r, err := NewReader(path)
 		require.NoError(t, err)
+
+		defer r.Close()
 
 		tagPos, err := r.SeekTag([]byte("commit"))
 		require.NoError(t, err)
@@ -527,6 +554,8 @@ func TestWal(t *testing.T) {
 		r, err := NewReader(path)
 		require.NoError(t, err)
 
+		defer r.Close()
+
 		tagPos, err := r.SeekTag([]byte("commit"))
 		require.NoError(t, err)
 
@@ -552,6 +581,9 @@ func TestWal(t *testing.T) {
 		err = wal.WriteTag([]byte("commit"))
 		require.NoError(t, err)
 
+		err = wal.Close()
+		require.NoError(t, err)
+
 		f, err := os.Open(filepath.Join(path, "tags"))
 		require.NoError(t, err)
 
@@ -571,6 +603,8 @@ func TestWal(t *testing.T) {
 		wal, err := New(path)
 		require.NoError(t, err)
 
+		defer wal.Close()
+
 		data := []byte("this is data")
 
 		err = wal.Write(data)
@@ -578,6 +612,8 @@ func TestWal(t *testing.T) {
 
 		r, err := NewReader(path)
 		require.NoError(t, err)
+
+		defer r.Close()
 
 		require.True(t, r.Next())
 
