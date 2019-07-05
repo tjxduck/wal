@@ -20,6 +20,9 @@ type WriteOptions struct {
 	// The maximum number of segments to keep on disk.
 	MaxSegments int
 
+	// The maximum time of segments to keep on disk.
+	TTL time.Duration
+
 	// If 0, sync is done after every write. Otherwise this controls
 	// how often the WAL is sync'd to disk. Setting this can speed
 	// up the WAL by sacrifing safety.
@@ -194,33 +197,61 @@ func (wal *WALWriter) rotateSegment() error {
 	return nil
 }
 
-func (wal *WALWriter) pruneSegments(total int) error {
-	startAt := wal.index - total
+func (wal *WALWriter) pruneSegments(total int, expiration time.Time) error {
+	startAt := wal.index - total + 1
+	if startAt < wal.first {
+		startAt = wal.first
+	}
 
-	for i := startAt; i >= wal.first; i-- {
+	if !expiration.IsZero() {
+		for ; startAt < wal.index; startAt++ {
+			filePath := filepath.Join(wal.root, fmt.Sprintf("%d", startAt))
+			stat, err := os.Stat(filePath)
+			if err != nil {
+				if !os.IsNotExist(err) {
+					return err
+				}
+			} else if stat.ModTime().After(expiration) {
+				// larger number means newer
+				// no need to check next if this is after expiration
+				break
+			}
+		}
+	}
+
+	pruned := false
+	for i := startAt - 1; i >= wal.first; i-- {
 		err := os.Remove(filepath.Join(wal.root, fmt.Sprintf("%d", i)))
 		if err != nil {
 			if !os.IsNotExist(err) {
 				return err
 			}
 		}
+		pruned = true
 	}
-	if startAt >= wal.first {
+
+	if pruned {
+		// Move the oldest horizon forward to our current first segment
+		wal.first = startAt
+		pruned = false
 		// remove tag cache as well
 		for tag, pos := range wal.cache.Tags {
 			if pos.Segment <= startAt {
 				delete(wal.cache.Tags, tag)
+				pruned = true
 			}
 		}
-		err := wal.cacheEnc.Encode(&wal.cache)
-		if err != nil {
-			return err
+		if pruned {
+			err := wal.cacheFile.Truncate(0)
+			if err == nil {
+				err = wal.cacheEnc.Encode(&wal.cache)
+				if err != nil {
+					return err
+				}
+				wal.cacheFile.Sync()
+			}
 		}
-		wal.cacheFile.Sync()
 	}
-
-	// Move the oldest horizon forward to our current first segment
-	wal.first = startAt + 1
 
 	return nil
 }
@@ -239,7 +270,11 @@ func (wal *WALWriter) Write(data []byte) error {
 			return err
 		}
 
-		err = wal.pruneSegments(wal.opts.MaxSegments)
+		var expiration time.Time
+		if wal.opts.TTL != 0 {
+			expiration = time.Now().Add(-wal.opts.TTL)
+		}
+		err = wal.pruneSegments(wal.opts.MaxSegments, expiration)
 		if err != nil {
 			return err
 		}

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -416,7 +417,7 @@ func TestWal(t *testing.T) {
 		err = wal.Write([]byte("second data"))
 		require.NoError(t, err)
 
-		err = wal.pruneSegments(1)
+		err = wal.pruneSegments(1, time.Time{})
 		require.NoError(t, err)
 
 		err = wal.Close()
@@ -533,7 +534,7 @@ func TestWal(t *testing.T) {
 		err = wal.rotateSegment()
 		require.NoError(t, err)
 
-		err = wal.pruneSegments(1)
+		err = wal.pruneSegments(1, time.Time{})
 		require.NoError(t, err)
 
 		_, err = os.Stat(filepath.Join(path, "0"))
