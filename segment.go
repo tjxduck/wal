@@ -322,39 +322,13 @@ func (s *SegmentReader) Pos() int64 {
 	return s.pos
 }
 
-func (r *SegmentReader) SeekTag(tag []byte) (int64, error) {
-	r.err = nil
-
-	var lastPos int64 = -1
-
-	for {
-		pos := r.pos
-		ent, err := r.readNext()
-		if err != nil {
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				break
-			}
-
-			r.err = err
-
-			return 0, err
-		}
-
-		if ent.entryType == tagType {
-			if bytes.Equal(ent.value, tag) {
-				lastPos = pos
-			}
+func (r *SegmentReader) SeekTag(tag []byte) error {
+	for r.next(tagType) {
+		if bytes.Equal(r.Value(), tag) {
+			return nil
 		}
 	}
-
-	if lastPos != -1 {
-		err := r.Seek(lastPos)
-		if err != nil {
-			return 0, err
-		}
-	}
-
-	return lastPos, nil
+	return io.EOF
 }
 
 var ErrCorruptCRC = errors.New("corrupt data detected")
@@ -408,8 +382,10 @@ func (r *SegmentReader) readNext() (e segmentEntry, err error) {
 }
 
 func (r *SegmentReader) Next() bool {
-	r.err = nil
+	return r.next(dataType)
+}
 
+func (r *SegmentReader) next(typ byte) bool {
 top:
 	ent, err := r.readNext()
 	if err != nil {
@@ -420,7 +396,7 @@ top:
 		return false
 	}
 
-	if ent.entryType == tagType {
+	if ent.entryType != typ {
 		goto top
 	}
 

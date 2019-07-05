@@ -1,7 +1,6 @@
 package wal
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"io/ioutil"
 	"os"
@@ -231,10 +230,7 @@ func TestWal(t *testing.T) {
 
 		assert.False(t, r.Next())
 
-		cur, err := r.Pos()
-		require.NoError(t, err)
-
-		assert.Equal(t, pos, cur)
+		assert.Equal(t, pos, r.Pos())
 	})
 
 	n.It("continues in the same segment when reopened", func() {
@@ -472,10 +468,7 @@ func TestWal(t *testing.T) {
 
 		defer r.Close()
 
-		pos, err := r.SeekTag([]byte("commit"))
-		require.NoError(t, err)
-
-		err = r.Seek(pos)
+		err = r.SeekTag([]byte("commit"))
 		require.NoError(t, err)
 
 		assert.True(t, r.Next())
@@ -495,10 +488,10 @@ func TestWal(t *testing.T) {
 		err = wal.rotateSegment()
 		require.NoError(t, err)
 
-		pos, err := wal.Pos()
+		err = wal.WriteTag([]byte("commit"))
 		require.NoError(t, err)
 
-		err = wal.WriteTag([]byte("commit"))
+		pos, err := wal.Pos()
 		require.NoError(t, err)
 
 		err = wal.Write([]byte("more data"))
@@ -512,10 +505,10 @@ func TestWal(t *testing.T) {
 
 		defer r.Close()
 
-		tagPos, err := r.SeekTag([]byte("commit"))
+		err = r.SeekTag([]byte("commit"))
 		require.NoError(t, err)
 
-		assert.Equal(t, pos, tagPos)
+		assert.Equal(t, pos, r.Pos())
 
 		assert.True(t, r.Next())
 
@@ -540,10 +533,10 @@ func TestWal(t *testing.T) {
 		_, err = os.Stat(filepath.Join(path, "0"))
 		require.Error(t, err)
 
-		pos, err := wal.Pos()
+		err = wal.WriteTag([]byte("commit"))
 		require.NoError(t, err)
 
-		err = wal.WriteTag([]byte("commit"))
+		pos, err := wal.Pos()
 		require.NoError(t, err)
 
 		err = wal.Write([]byte("more data"))
@@ -557,10 +550,10 @@ func TestWal(t *testing.T) {
 
 		defer r.Close()
 
-		tagPos, err := r.SeekTag([]byte("commit"))
+		err = r.SeekTag([]byte("commit"))
 		require.NoError(t, err)
 
-		assert.Equal(t, pos, tagPos)
+		assert.Equal(t, pos, r.Pos())
 
 		assert.True(t, r.Next())
 
@@ -595,9 +588,7 @@ func TestWal(t *testing.T) {
 		err = json.NewDecoder(f).Decode(&tc)
 		require.NoError(t, err)
 
-		key := base64.URLEncoding.EncodeToString([]byte("commit"))
-
-		assert.Equal(t, pos, tc.Tags[key])
+		assert.Equal(t, pos, tc.Tags["commit"])
 	})
 
 	n.It("allows the reader to continue after hitting the end", func() {

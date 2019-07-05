@@ -166,10 +166,10 @@ func TestSegment(t *testing.T) {
 		_, err = segment.Write([]byte("test data"))
 		require.NoError(t, err)
 
-		pos := segment.Pos()
-
 		err = segment.WriteTag([]byte("test"))
 		require.NoError(t, err)
+
+		pos := segment.Pos()
 
 		_, err = segment.Write([]byte("more test data"))
 		require.NoError(t, err)
@@ -181,10 +181,10 @@ func TestSegment(t *testing.T) {
 
 		defer r.Close()
 
-		tagPos, err := r.SeekTag([]byte("test"))
+		err = r.SeekTag([]byte("test"))
 		require.NoError(t, err)
 
-		assert.Equal(t, pos, tagPos)
+		assert.Equal(t, pos, r.Pos())
 
 		assert.True(t, r.Next())
 

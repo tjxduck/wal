@@ -1,10 +1,11 @@
 package wal
 
 import (
-	"encoding/base64"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -21,7 +22,7 @@ type WriteOptions struct {
 	MaxSegments int
 
 	// The maximum time of segments to keep on disk.
-	TTL time.Duration
+	SegmentTTL time.Duration
 
 	// If 0, sync is done after every write. Otherwise this controls
 	// how often the WAL is sync'd to disk. Setting this can speed
@@ -236,7 +237,7 @@ func (wal *WALWriter) pruneSegments(total int, expiration time.Time) error {
 		pruned = false
 		// remove tag cache as well
 		for tag, pos := range wal.cache.Tags {
-			if pos.Segment <= startAt {
+			if pos.Segment < startAt {
 				delete(wal.cache.Tags, tag)
 				pruned = true
 			}
@@ -271,8 +272,8 @@ func (wal *WALWriter) Write(data []byte) error {
 		}
 
 		var expiration time.Time
-		if wal.opts.TTL != 0 {
-			expiration = time.Now().Add(-wal.opts.TTL)
+		if wal.opts.SegmentTTL != 0 {
+			expiration = time.Now().Add(-wal.opts.SegmentTTL)
 		}
 		err = wal.pruneSegments(wal.opts.MaxSegments, expiration)
 		if err != nil {
@@ -319,8 +320,7 @@ func (wal *WALWriter) WriteTag(tag []byte) error {
 	}
 
 	if truncErr == nil {
-		key := base64.URLEncoding.EncodeToString(tag)
-		wal.cache.Tags[key] = Position{wal.index, segPos}
+		wal.cache.Tags[string(tag)] = Position{wal.index, segPos}
 
 		err = wal.cacheEnc.Encode(&wal.cache)
 		if err == nil {
@@ -344,8 +344,6 @@ type WALReader struct {
 	index int
 
 	seg *SegmentReader
-
-	lastSegPos int64
 
 	err error
 }
@@ -393,15 +391,17 @@ func (wal *WALReader) Reset() error {
 	return nil
 }
 
-func (wal *WALReader) Pos() (Position, error) {
-	if wal.seg == nil {
-		return Position{wal.index, wal.lastSegPos}, nil
+func (wal *WALReader) Pos() Position {
+	if wal.err != nil || wal.seg == nil {
+		return Position{-1, -1}
 	}
-
-	return Position{wal.index, wal.seg.Pos()}, nil
+	return Position{wal.index, wal.seg.Pos()}
 }
 
 func (wal *WALReader) Seek(p Position) error {
+	if p.Segment == wal.index && wal.seg != nil {
+		return wal.seg.Seek(p.Offset)
+	}
 	path := filepath.Join(wal.root, fmt.Sprintf("%d", p.Segment))
 
 	seg, err := NewSegmentReader(path)
@@ -414,7 +414,9 @@ func (wal *WALReader) Seek(p Position) error {
 		return err
 	}
 
-	wal.seg.Close()
+	if wal.seg != nil {
+		wal.seg.Close()
+	}
 
 	wal.index = p.Segment
 	wal.seg = seg
@@ -432,53 +434,51 @@ func (wal *WALReader) SeekLast() error {
 		return err
 	}
 	for wal.Next() {
-		p, err = wal.Pos()
+		err = wal.Error()
 		if err != nil {
 			return err
 		}
+		p = wal.Pos()
 	}
 	return wal.Seek(p)
 }
 
-func (wal *WALReader) SeekTag(tag []byte) (Position, error) {
-	lastPos := Position{-1, -1}
-
-	index := wal.first
-
-	for {
-		path := filepath.Join(wal.root, fmt.Sprintf("%d", index))
-
-		seg, err := NewSegmentReader(path)
+func (wal *WALReader) SeekTag(tag []byte) error {
+	cacheFile, err := os.Open(filepath.Join(wal.root, "tags"))
+	if err == nil {
+		defer cacheFile.Close()
+		var cache tagCache
+		err = json.NewDecoder(cacheFile).Decode(&cache)
 		if err != nil {
-			if os.IsNotExist(err) {
-				return lastPos, nil
-			}
-
-			return lastPos, err
+			return err
 		}
-
-		if wal.seg != nil {
-			err = wal.seg.Close()
+		if pos, found := cache.Tags[string(tag)]; found {
+			err = wal.Seek(pos)
 			if err != nil {
-				return lastPos, err
+				return err
 			}
+			if wal.next(tagType) {
+				if bytes.Equal(wal.Value(), tag) {
+					return nil
+				}
+			}
+			goto eof
 		}
-
-		wal.seg = seg
-
-		pos, err := seg.SeekTag(tag)
-		if err != nil {
-			return lastPos, err
-		}
-
-		if pos >= 0 {
-			lastPos = Position{index, pos}
-		}
-
-		index++
+	} else {
+		// TODO: warning
 	}
 
-	return lastPos, nil
+	for wal.next(tagType) {
+		if bytes.Equal(wal.Value(), tag) {
+			return nil
+		}
+	}
+eof:
+	err = wal.Error()
+	if err != nil {
+		return err
+	}
+	return io.EOF
 }
 
 func (r *WALReader) Close() error {
@@ -490,13 +490,15 @@ func (r *WALReader) Close() error {
 }
 
 func (r *WALReader) Next() bool {
-	if r.seg.Next() {
+	return r.next(dataType)
+}
+
+func (r *WALReader) next(typ byte) bool {
+	if r.seg != nil && r.seg.next(typ) {
 		return true
 	}
 
-	r.lastSegPos = r.seg.Pos()
 	idx := r.index
-
 	for {
 		idx++
 		if idx > r.last {
@@ -521,7 +523,7 @@ func (r *WALReader) Next() bool {
 			return false
 		}
 
-		if seg.Next() {
+		if seg.next(typ) {
 			if r.seg != nil {
 				r.seg.Close()
 			}
