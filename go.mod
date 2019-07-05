@@ -1,4 +1,4 @@
-module wal
+module github.com/tjxduck/wal
 
 go 1.12
 
