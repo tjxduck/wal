@@ -243,13 +243,9 @@ func (wal *WALWriter) pruneSegments(total int, expiration time.Time) error {
 			}
 		}
 		if pruned {
-			err := wal.cacheFile.Truncate(0)
-			if err == nil {
-				err = wal.cacheEnc.Encode(&wal.cache)
-				if err != nil {
-					return err
-				}
-				wal.cacheFile.Sync()
+			err := wal.flushTagsFile()
+			if err != nil {
+				return err
 			}
 		}
 	}
@@ -303,6 +299,23 @@ func (wal *WALWriter) Pos() (Position, error) {
 	return Position{wal.index, pos}, nil
 }
 
+func (wal *WALWriter) flushTagsFile() error {
+	err := wal.cacheFile.Truncate(0)
+	if err != nil {
+		return err
+	}
+	_, err = wal.cacheFile.Seek(0, os.SEEK_SET)
+	if err != nil {
+		return err
+	}
+	err = wal.cacheEnc.Encode(&wal.cache)
+	if err != nil {
+		return err
+	}
+
+	return wal.cacheFile.Sync()
+}
+
 func (wal *WALWriter) WriteTag(tag []byte) error {
 	wal.lock.Lock()
 	defer wal.lock.Unlock()
@@ -310,7 +323,6 @@ func (wal *WALWriter) WriteTag(tag []byte) error {
 	// We truncate the cache and rewrite it after the segment
 	// has confirmed the tag so the cache is either absent
 	// or correct, never present but out of date.
-	truncErr := wal.cacheFile.Truncate(0)
 
 	segPos := wal.segment.Pos()
 
@@ -318,17 +330,9 @@ func (wal *WALWriter) WriteTag(tag []byte) error {
 	if err != nil {
 		return err
 	}
+	wal.cache.Tags[string(tag)] = Position{wal.index, segPos}
 
-	if truncErr == nil {
-		wal.cache.Tags[string(tag)] = Position{wal.index, segPos}
-
-		err = wal.cacheEnc.Encode(&wal.cache)
-		if err == nil {
-			wal.cacheFile.Sync()
-		}
-	}
-
-	return nil
+	return wal.flushTagsFile()
 }
 
 func (wal *WALWriter) Close() error {
