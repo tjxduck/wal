@@ -230,6 +230,7 @@ func TestWal(t *testing.T) {
 
 		assert.False(t, r.Next())
 
+		pos.Offset += int64(len(closingMagic))
 		assert.Equal(t, pos, r.Pos())
 	})
 
@@ -595,8 +596,6 @@ func TestWal(t *testing.T) {
 		wal, err := New(path)
 		require.NoError(t, err)
 
-		defer wal.Close()
-
 		data := []byte("this is data")
 
 		err = wal.Write(data)
@@ -619,6 +618,19 @@ func TestWal(t *testing.T) {
 		require.True(t, r.Next())
 
 		assert.Equal(t, "more data", string(r.Value()))
+
+		err = wal.Close()
+		require.NoError(t, err)
+
+		r2, err := NewReader(path)
+		require.NoError(t, err)
+
+		err = r2.SeekLast()
+		require.NoError(t, err)
+
+		require.True(t, r2.Next())
+
+		assert.Equal(t, "more data", string(r2.Value()))
 	})
 
 	n.Meow()

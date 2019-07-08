@@ -438,12 +438,12 @@ func (wal *WALReader) SeekLast() error {
 		return err
 	}
 	for wal.Next() {
-		err = wal.Error()
-		if err != nil {
-			return err
-		}
 		p1 = p2
 		p2 = wal.Pos()
+	}
+	err = wal.Error()
+	if err != nil {
+		return err
 	}
 	if p1.None() {
 		return ErrNoSegments
@@ -502,6 +502,7 @@ func (r *WALReader) Next() bool {
 }
 
 func (r *WALReader) next(typ byte) bool {
+	r.err = nil
 	if r.seg != nil && r.seg.next(typ) {
 		return true
 	}
@@ -531,12 +532,14 @@ func (r *WALReader) next(typ byte) bool {
 			return false
 		}
 
-		if seg.next(typ) {
-			if r.seg != nil {
-				r.seg.Close()
-			}
-			r.seg = seg
+		if r.seg != nil {
+			r.seg.Close()
+		}
+		r.seg = seg
+		if r.seg.next(typ) {
 			break
+		} else {
+			return false
 		}
 	}
 

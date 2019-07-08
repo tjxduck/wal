@@ -96,8 +96,6 @@ func (s *SegmentWriter) syncEvery() error {
 	return nil
 }
 
-var closingMagic = []byte("\x00this segment was closed properly\x42")
-
 func (s *SegmentWriter) Close() error {
 	if s.bgSync {
 		s.t.Kill(nil)
@@ -154,9 +152,12 @@ func (s *SegmentWriter) calculateClean() error {
 }
 
 const (
+	statType = 's'
 	dataType = 'd'
 	tagType  = 't'
 )
+
+var closingMagic = []byte("\xE3\x14\x04\xC5s\x20this segment was closed properly")
 
 func (s *SegmentWriter) writeType(t byte, data []byte) (int, error) {
 	//out := snappy.Encode(s.buf, data)
@@ -387,6 +388,7 @@ func (r *SegmentReader) Next() bool {
 
 func (r *SegmentReader) next(typ byte) bool {
 top:
+	r.err = nil
 	ent, err := r.readNext()
 	if err != nil {
 		if err != io.EOF {
