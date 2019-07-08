@@ -425,11 +425,15 @@ func (wal *WALReader) Seek(p Position) error {
 }
 
 func (wal *WALReader) SeekLast() error {
-	p := Position{
+	p1 := Position{
+		Segment: -1,
+		Offset:  -1,
+	}
+	p2 := Position{
 		Segment: wal.last,
 		Offset:  0,
 	}
-	err := wal.Seek(p)
+	err := wal.Seek(p2)
 	if err != nil {
 		return err
 	}
@@ -438,9 +442,13 @@ func (wal *WALReader) SeekLast() error {
 		if err != nil {
 			return err
 		}
-		p = wal.Pos()
+		p1 = p2
+		p2 = wal.Pos()
 	}
-	return wal.Seek(p)
+	if p1.None() {
+		return ErrNoSegments
+	}
+	return wal.Seek(p1)
 }
 
 func (wal *WALReader) SeekTag(tag []byte) error {
